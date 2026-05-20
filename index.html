@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Game Penalti Sepak Bola v2</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #222;
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            color: white;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            width: 600px;
+            height: 400px;
+            background: linear-gradient(to bottom, #4da6ff 40%, #2e7d32 40%);
+            border: 4px solid #fff;
+            border-radius: 8px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+        }
+
+        /* Gawang */
+        #goal {
+            position: absolute;
+            top: 60px;
+            left: 150px;
+            width: 300px;
+            height: 100px;
+            border: 5px solid white;
+            border-bottom: none;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Kiper Komputer */
+        #gk {
+            position: absolute;
+            top: 110px;
+            left: 280px;
+            width: 40px;
+            height: 50px;
+            background: #0288d1;
+            border-radius: 4px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            transition: top 0.2s ease;
+        }
+
+        /* Target yang bergerak (Akurasi Tendangan) */
+        #target {
+            position: absolute;
+            top: 45px;
+            left: 150px;
+            width: 20px;
+            height: 20px;
+            background: #ffeb3b;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #ffeb3b;
+        }
+
+        /* Bola Sepak */
+        #ball {
+            position: absolute;
+            bottom: 30px;
+            left: 285px;
+            width: 30px;
+            height: 30px;
+            background: white;
+            border-radius: 50%;
+            box-shadow: inset 0 0 5px #000;
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+
+        #ball::before {
+            content: '⚽';
+            font-size: 26px;
+            position: absolute;
+            top: -3px;
+            left: 1px;
+        }
+
+        /* Papan Informasi */
+        #ui {
+            margin-top: 20px;
+            text-align: center;
+            width: 600px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .stats {
+            font-size: 20px;
+            font-weight: bold;
+            background: rgba(0,0,0,0.4);
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: 1px solid #444;
+        }
+        
+        #instruction {
+            font-size: 16px;
+            color: #ccc;
+            margin-top: 10px;
+        }
+
+        #message {
+            font-size: 28px;
+            font-weight: bold;
+            height: 35px;
+            margin-top: 15px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="goal"></div>
+        <div id="gk">🧤</div>
+        <div id="target"></div>
+        <div id="ball"></div>
+    </div>
+
+    <div id="ui">
+        <div class="stats" style="color: #4caf50;">SKOR: <span id="score">0</span></div>
+        <div class="stats" style="color: #e53935;">NYAWA: <span id="lives">❤️❤️❤️</span></div>
+    </div>
+
+    <div id="instruction">
+        Tekan <strong style="color: #ffeb3b; background: #333; padding: 2px 8px; border-radius: 4px;">SPACEBAR</strong> untuk menembak ke arah target kuning!
+    </div>
+    <div id="message"></div>
+
+    <script>
+        const target = document.getElementById('target');
+        const gk = document.getElementById('gk');
+        const ball = document.getElementById('ball');
+        const scoreDisplay = document.getElementById('score');
+        const livesDisplay = document.getElementById('lives');
+        const message = document.getElementById('message');
+
+        // Batas Gawang (X: 150px sampai 450px)
+        const GOAL_LEFT = 150;
+        const GOAL_RIGHT = 430; // Lebar gawang dikurangi lebar objek
+
+        // State Target
+        let targetX = 150;
+        let targetSpeed = 5;
+        let targetMovingRight = true;
+
+        // State Kiper
+        let gkX = 280;
+        let gkSpeed = 3.5;
+        let gkMovingRight = true;
+
+        // State Game
+        let score = 0;
+        let lives = 3;
+        let isKicking = false;
+        let isGameOver = false;
+        let animationFrameId;
+
+        // Loop Utama Game (Animasi Berjalan Bersamaan)
+        function gameLoop() {
+            if (isGameOver) return;
+
+            // 1. Gerakkan Target Kuning
+            if (targetMovingRight) {
+                targetX += targetSpeed;
+                if (targetX >= GOAL_RIGHT + 10) targetMovingRight = false;
+            } else {
+                targetX -= targetSpeed;
+                if (targetX <= GOAL_LEFT) targetMovingRight = true;
+            }
+            target.style.left = targetX + 'px';
+
+            // 2. Gerakkan Kiper secara otomatis
+            if (gkMovingRight) {
+                gkX += gkSpeed;
+                if (gkX >= GOAL_RIGHT) {
+                    gkMovingRight = false;
+                    changeGkSpeedRandomly(); // Ubah kecepatan acak tiap balik arah
+                }
+            } else {
+                gkX -= gkSpeed;
+                if (gkX <= GOAL_LEFT) {
+                    gkMovingRight = true;
+                    changeGkSpeedRandomly();
+                }
+            }
+            gk.style.left = gkX + 'px';
+
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function changeGkSpeedRandomly() {
+            // Memberikan efek kiper pintar yang kadang cepat, kadang lambat
+            gkSpeed = 2.5 + Math.random() * 4; 
+        }
+
+        // Mulai Game
+        gameLoop();
+
+        // Deteksi Tombol Spacebar
+        window.addEventListener('keydown', function(event) {
+            if (event.code === 'Space') {
+                event.preventDefault(); // Mencegah halaman scroll otomatis saat tekan space
+                
+                if (isGameOver) {
+                    restartGame();
+                } else if (!isKicking) {
+                    kickBall();
+                }
+            }
+        });
+
+        function kickBall() {
+            isKicking = true;
+            
+            // Tentukan titik horizontal tujuan bola berdasarkan target kuning saat ditekan
+            const finalBallX = targetX;
+
+            // Jalankan animasi bola maju ke gawang
+            ball.style.bottom = '260px';
+            ball.style.left = finalBallX + 'px';
+            ball.style.transform = 'scale(0.55) rotate(360deg)';
+
+            // Cek hasil setelah animasi bola sampai di gawang (400ms)
+            setTimeout(() => {
+                // Berhentikan kiper sebentar agar pemain bisa melihat posisi akhir tabrakan
+                cancelAnimationFrame(animationFrameId);
+
+                // Hitung koordinat kiper dan bola saat itu
+                // Toleransi tabrakan: Lebar kiper adalah 40px, kita cek apakah bola berada di jangkauan kiper
+                const isSaved = finalBallX >= (gkX - 15) && finalBallX <= (gkX + 35);
+
+                if (isSaved) {
+                    // Kiper berhasil menepis! Tarik kiper sedikit ke bawah sebagai animasi melompat
+                    gk.style.top = '100px';
+                    message.innerHTML = "<span style='color: #f44336;'>🧤 DITEPIS KIPER!</span>";
+                    lives--;
+                    updateLivesDisplay();
+                } else {
+                    // GOL!
+                    message.innerHTML = "<span style='color: #4caf50;'>⚽ GOOOAAALLL!!!</span>";
+                    score++;
+                    scoreDisplay.innerText = score;
+                    
+                    // Tingkatkan kesulitan sedikit demi sedikit
+                    targetSpeed += 0.4;
+                }
+
+                // Cek status Game Over
+                setTimeout(() => {
+                    gk.style.top = '110px'; // Kembalikan posisi vertikal kiper
+                    if (lives <= 0) {
+                        triggerGameOver();
+                    } else {
+                        resetRound();
+                    }
+                }, 1200);
+
+            }, 400);
+        }
+
+        function updateLivesDisplay() {
+            let hearts = '';
+            for(let i=0; i<lives; i++) hearts += '❤️';
+            for(let i=lives; i<3; i++) hearts += '🖤';
+            livesDisplay.innerText = hearts ? hearts : '🖤🖤🖤';
+        }
+
+        function resetRound() {
+            // Kembalikan bola ke titik penalti
+            ball.style.bottom = '30px';
+            ball.style.left = '285px';
+            ball.style.transform = 'scale(1) rotate(0deg)';
+            message.innerText = '';
+            isKicking = false;
+            
+            // Lanjutkan pergerakan kiper dan target
+            gameLoop();
+        }
+
+        function triggerGameOver() {
+            isGameOver = true;
+            message.innerHTML = "<span style='color: #ff3d00;'>🔴 GAME OVER!</span><br><span style='font-size: 16px; color:#fff;'>Tekan SPACE untuk Main Lagi</span>";
+        }
+
+        function restartGame() {
+            score = 0;
+            lives = 3;
+            targetSpeed = 5;
+            gkSpeed = 3.5;
+            isGameOver = false;
+            isKicking = false;
+            scoreDisplay.innerText = score;
+            updateLivesDisplay();
+            message.innerText = '';
+            
+            ball.style.bottom = '30px';
+            ball.style.left = '285px';
+            ball.style.transform = 'scale(1) rotate(0deg)';
+            
+            gameLoop();
+        }
+    </script>
+</body>
+</html>
